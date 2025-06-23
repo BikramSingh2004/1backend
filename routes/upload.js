@@ -9,31 +9,41 @@ import Document from '../models/Document.js';
 
 const router = express.Router();
 
+// Storage config
 const upload = multer({ dest: 'uploads/' });
 
-router.post('/upload-faq', upload.single('faq'), async (req, res) => {
-  const file = req.file;
+// Accept text, images, documents, and PDFs
+const allowedTypes = ['.txt', '.doc', '.docx', '.pdf', '.jpg', '.jpeg', '.png'];
 
-  if (!file) {
-    return res.status(400).json({ error: 'No file uploaded' });
+router.post('/upload', upload.single('file'), async (req, res) => {
+  const file = req.file;
+  if (!file) return res.status(400).json({ error: 'No file uploaded' });
+
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (!allowedTypes.includes(ext)) {
+    fs.unlinkSync(file.path); // cleanup
+    return res.status(400).json({ error: 'Unsupported file type' });
   }
 
   try {
-    const filePath = path.join('uploads', file.filename);
-    const text = fs.readFileSync(filePath, 'utf-8');
+    let content = '';
+    if (ext === '.txt') {
+      content = fs.readFileSync(file.path, 'utf-8');
+    } else {
+      content = `[Binary file uploaded: ${file.originalname}]`;
+    }
 
     await Document.create({
       filename: file.originalname,
-      content: text,
+      content,
     });
 
-    fs.unlinkSync(filePath); // Clean up after storing
+    fs.unlinkSync(file.path);
 
-    console.log('📄 Uploaded FAQ Saved:', file.originalname);
-    res.json({ message: 'FAQ document uploaded and stored' });
+    res.json({ message: 'File uploaded and metadata saved', filename: file.originalname });
   } catch (err) {
     console.error('❌ Upload error:', err);
-    res.status(500).json({ error: 'Upload failed' });
+    res.status(500).json({ error: 'Failed to upload' });
   }
 });
 
